@@ -1,4 +1,4 @@
-# 🧠 Ghidralate — Run IDA Pro Plugins in Ghidra
+# Ghidralate — Run IDA Pro Plugins in Ghidra
 
 **Ghidralate** is a compatibility layer that allows you to run **IDA Pro plugins inside Ghidra** without modifying their source code.
 
