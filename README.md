@@ -12,7 +12,7 @@ It works by wrapping IDA SDK function calls and redirecting them to Ghidra's API
 
 ## 📌 Description
 
-The core idea is to make IDA plugins think they are running inside IDA. Ghidralate does this by emulating the modules `idaapi`, `idc`, `idautils`, `ida_bytes`, etc., using Python scripts that internally call Ghidra's APIs.
+The core idea is to make IDA plugins think they are running inside IDA. Ghidralation does this by emulating the modules `idaapi`, `idc`, `idautils`, `ida_bytes`, etc., using Python scripts that internally call Ghidra's APIs.
 
 - No need to rewrite plugin logic.
 - Transparent API translation at runtime.
@@ -35,7 +35,7 @@ The core idea is to make IDA plugins think they are running inside IDA. Ghidrala
 
 1. **Place the plugin folder inside your Ghidra project**
    - Copy your IDA plugin (e.g., `findcrypt3.py`) to a folder.
-   - Add all Ghidralate wrapper files (`main.py`, `cp.py`, `idaapi.py`, etc.) to that same folder.
+   - Add all Ghidralation wrapper files (`main.py`, `cp.py`, `idaapi.py`, etc.) to that same folder.
 
 2. **Launch Ghidra in console mode** (to see output)
    ```bash
@@ -49,6 +49,6 @@ Currently supported:
 - ✅ [Findcrypt](https://github.com/polymorf/findcrypt-yara)
 
 > 🛠️ Support for additional IDA plugins is in progress.  
-> Plugins such as **Syms2elf** and **UEFI REtool** are being adapted to work under Ghidralate.
+> Plugins such as **Syms2elf** and **UEFI REtool** are being adapted to work under Ghidralation.
 
 
