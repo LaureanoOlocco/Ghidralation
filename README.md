@@ -1,6 +1,8 @@
 # Ghidralation — Run IDA Pro Plugins in Ghidra
 
-![Ghidralation Logo](./images/logo.png)
+<div align="center">
+  <img src="./images/logo.png" alt="Ghidralation Logo" width="500">
+</div>
 
 **Ghidralation** is a compatibility layer that allows you to run **IDA Pro plugins inside Ghidra** without modifying their source code.
 
