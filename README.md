@@ -1,5 +1,7 @@
 # Ghidralation — Run IDA Pro Plugins in Ghidra
 
+![Ghidralation Logo](./images/logo.png)
+
 **Ghidralation** is a compatibility layer that allows you to run **IDA Pro plugins inside Ghidra** without modifying their source code.
 
 It works by wrapping IDA SDK function calls and redirecting them to Ghidra's API (e.g., `FlatProgramAPI`, `Memory`, `Listing`, etc.). This enables seamless execution of many FLOSS IDA plugins directly on Ghidra ≥11.3.
