@@ -4,56 +4,56 @@
 # @runtime PyGhidra
 
 """
-Test suite inicial para set_name() en Ghidralation.
-Ejecutar desde Ghidra con un programa cargado.
+Initial test suite for set_name() in Ghidralation.
+Run from Ghidra with a program loaded.
 """
 
 import sys
 import os
 from ghidra.program.model.symbol import SourceType
 
-# Agregar src/ al path
+# Add src/ to the path
 script_dir = os.path.dirname(os.path.abspath(__file__))
 src_dir = os.path.join(os.path.dirname(script_dir), "src")
 sys.path.insert(0, src_dir)
 
-# Configurar currentProgram
+# Set currentProgram
 import cp
 
 cp.currentProgram = currentProgram
 
-# Información básica del programa cargado
+# Basic info about the loaded program
 program = currentProgram
 
 # ================================
-# Cuadro de bienvenida
+# Welcome banner
 # ================================
 print(
     f"""
 ================================================================
                 TEST SUITE - (Ghidralation)
 ----------------------------------------------------------------
-Este conjunto de tests valida:
-  • Importación de módulos
-  • Creación y verificación de símbolos
-  • Eliminación de símbolos
+This test suite validates:
+  • Module import
+  • Symbol creation and verification
+  • Symbol deletion
 
-Ejecutar con un programa cargado en Ghidra.
+Run this with a program loaded in Ghidra.
 
-=== Información del Programa ===
-Nombre del Programa      : {program.getName()}
-Ruta del Ejecutable      : {program.getExecutablePath()}
-Lenguaje                 : {program.getLanguage()}
-Compilador               : {program.getCompilerSpec()}
-Dirección Mínima         : {program.getMinAddress()}
-Dirección Máxima         : {program.getMaxAddress()}
+=== Program Information ===
+Program Name             : {program.getName()}
+Executable Path          : {program.getExecutablePath()}
+Language                 : {program.getLanguage()}
+Compiler                 : {program.getCompilerSpec()}
+Minimum Address          : {program.getMinAddress()}
+Maximum Address          : {program.getMaxAddress()}
 ================================================================
     """
 )
 
-# Importar módulos
+# Import modules
 import ida_name
-from ida_name import set_name, get_name, SN_NOCHECK
+from ida_name import set_name, get_name, SN_NOCHECK, SN_CHECK
 
 
 class TestSetName:
@@ -65,66 +65,99 @@ class TestSetName:
         self.min_addr = self.program.getMinAddress().getOffset()
         self.max_addr = self.program.getMaxAddress().getOffset()
 
-        print(">>> Iniciando tests para ida_name.set_name()")
-        print(f"    Programa cargado       : {self.program.getName()}")
-        print(f"    Rango de direcciones   : 0x{self.min_addr:x} - 0x{self.max_addr:x}")
-        print("----------------------------------------------------------------")
+        # Result counters
+        self.tests_passed = 0
+        self.tests_failed = 0
+        self.test_addresses = []  # For cleanup at the end
+
+        print(">>> Starting tests for ida_name.set_name()")
+        print(f"    Loaded Program         : {self.program.getName()}")
+        print(f"    Address Range          : 0x{self.min_addr:x} - 0x{self.max_addr:x}")
+        print("================================================================")
 
     def get_test_address(self, offset=0x100):
-        """Obtiene una dirección válida para testing (dentro del rango)."""
+        """Get a valid address for testing."""
         addr = self.min_addr + offset
         if addr > self.max_addr:
-            addr = self.min_addr  # fallback seguro
+            addr = self.min_addr + (offset % 0x100)
+
+        # Avoid conflicts using unique addresses
+        while addr in self.test_addresses:
+            addr += 0x10
+            if addr > self.max_addr:
+                addr = self.min_addr
+
+        self.test_addresses.append(addr)
         return addr
 
-    def test_import(self):
-        """Verifica que el módulo se importe correctamente."""
-        print("\n[TEST] Importación del módulo")
+    def assert_test(self, condition, test_name, error_msg=""):
+        """Helper to handle assertions and counting."""
+        if condition:
+            print(f"✓ PASS: {test_name}")
+            self.tests_passed += 1
+        else:
+            print(f"✗ FAIL: {test_name}")
+            if error_msg:
+                print(f"    Error: {error_msg}")
+            self.tests_failed += 1
+
+    def cleanup_test_address(self, addr):
+        """Cleans up a symbol from a test address."""
+        try:
+            set_name(addr, "", 0)
+        except:
+            pass
+
+    # ================================
+    # BASIC TESTS
+    # ================================
+
+    def test_01_import(self):
+        """Verify that the module is imported correctly."""
+        print("\n[TEST 01] Module import")
         print("----------------------------------------------------------------")
-        assert callable(set_name), "Error: set_name no es callable"
-        assert callable(get_name), "Error: get_name no es callable"
-        print("Resultado: Importación correcta y funciones disponibles")
+
+        self.assert_test(callable(set_name), "set_name is callable")
+        self.assert_test(callable(get_name), "get_name is callable")
+        self.assert_test(isinstance(SN_CHECK, int), "SN_* constants are defined")
 
     def test_basic_symbol_creation(self):
-        """Crea, verifica y borra un símbolo básico."""
-        print("\n[TEST] Creación básica de símbolo")
+        """Create, verify, and delete a basic symbol."""
+        print("\n[TEST] Basic symbol creation")
         print("----------------------------------------------------------------")
         addr = self.get_test_address()
 
-        print(f"Dirección seleccionada para prueba: 0x{addr:x}")
+        print(f"Selected test address: 0x{addr:x}")
 
         try:
             result = set_name(addr, "test_symbol", SN_NOCHECK)
             if result != 1:
-                print("Error: No se pudo crear el símbolo (resultado != 1)")
+                print("Error: Could not create symbol (result != 1)")
                 return
-            print(f"Símbolo creado correctamente en 0x{addr:x}")
+            print(f"Symbol successfully created at 0x{addr:x}")
 
             name = get_name(addr, 0)
             if "test_symbol" not in name:
-                print(f"Error: El nombre obtenido no coincide (obtenido: {name})")
+                print(f"Error: Retrieved name does not match (got: {name})")
                 return
-            print(f"Verificación exitosa: nombre leído = {name}")
+            print(f"Successful verification: retrieved name = {name}")
 
             result = set_name(addr, "", 0)
             if result != 1:
-                print("Error: No se pudo borrar el símbolo")
+                print("Error: Could not delete the symbol")
                 return
-            print("Símbolo borrado correctamente")
+            print("Symbol successfully deleted")
         except Exception as e:
-            print(f"Excepción durante el test: {e}")
+            print(f"Exception during test: {e}")
 
     def run(self):
-        """Ejecuta la suite de tests."""
-        print("\n================= INICIO DE TESTS =================")
-        self.test_import()
+        """Run the test suite."""
+        print("\n================= BEGIN TESTS =================")
+        self.test_01_import()
         self.test_basic_symbol_creation()
-        print("\n================= FIN DE TESTS ====================")
+        print("\n================= END OF TESTS ====================")
 
 
-# ================================
-# Ejecución
-# ================================
 if __name__ == "__main__":
     tester = TestSetName()
     tester.run()

@@ -30,7 +30,7 @@ def get_name(ea, flags):
     fcp = FlatProgramAPI(cp.currentProgram)
     listing = cp.currentProgram.getListing()
     minAddress = cp.currentProgram.minAddress.getOffset()
-    codeUnit = listing.getCodeUnitAt(fcp.toAddr(minAddress + ea))
+    codeUnit = listing.getCodeUnitAt(fcp.toAddr(ea))
     ret = str()
     if codeUnit != None:
         name = codeUnit.getSymbols()
@@ -48,21 +48,16 @@ def set_name(ea, name, flags=0):
     :param flags: integer flags with combined SN_* bits
     :returns: 1 if successful, 0 if it fails or does nothing
     """
-    # Usage example:
-    # set_name(0x401000, "main_function", SN_PUBLIC | SN_NOCHECK | SN_FORCE)
-    # set_name(0x401010, "local_var", SN_LOCAL | SN_NOCHECK)
-    # set_name(0x401020, "", 0)  # Delete name
-    # name == None -> do nothing
 
     if name is None:
         return 0
 
-    # Validate address
-    addr = None
+    program = cp.currentProgram  # ✅ Igual que get_name
+    addr_factory = program.getAddressFactory()
+
+    # Validar dirección
     try:
-        addr = (
-            currentProgram.getAddressFactory().getDefaultAddressSpace().getAddress(ea)
-        )
+        addr = addr_factory.getDefaultAddressSpace().getAddress(ea)
     except Exception:
         if not (flags & SN_NOWARN):
             print(f"Warning: invalid address {ea}")
@@ -71,46 +66,35 @@ def set_name(ea, name, flags=0):
     if addr is None:
         return 0
 
-    # Get the symbol table
-    symbol_table = currentProgram.getSymbolTable()
+    # Obtener symbol table
+    symbol_table = program.getSymbolTable()
 
-    # Validate name if SN_CHECK is active (default)
+    # Validar nombre si SN_CHECK está activo
+    import re
+
     if not (flags & SN_NOCHECK):
-        # Check for basic valid characters
-        import re
-
         if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", name) and name != "":
             if not (flags & SN_NOWARN):
                 print(f"Warning: invalid name '{name}' contains invalid characters")
             return 0
     else:
-        # SN_NOCHECK: replace invalid characters with '_'
-        import re
-
         if name != "":
-            # Replace invalid characters
             name = re.sub(r"[^a-zA-Z0-9_]", "_", name)
-            # Ensure it starts with a letter or _
             if name and not re.match(r"^[a-zA-Z_]", name):
                 name = "_" + name
 
-    # Get existing symbol at the address
+    # Buscar símbolo existente
     existing_symbols = symbol_table.getSymbols(addr)
-    primary_symbol = None
-
-    for sym in existing_symbols:
-        if sym.isPrimary():
-            primary_symbol = sym
-            break
+    primary_symbol = next((sym for sym in existing_symbols if sym.isPrimary()), None)
 
     try:
-        # Delete name if it's an empty string
+        # Eliminar nombre
         if name == "":
             if primary_symbol is not None:
                 symbol_table.removeSymbolSpecial(primary_symbol)
             return 1
 
-        # Apply SN_NODUMMY: prefix with '_' if it starts with dummy suffix
+        # Aplicar SN_NODUMMY
         if flags & SN_NODUMMY:
             dummy_prefixes = [
                 "sub_",
@@ -121,12 +105,10 @@ def set_name(ea, name, flags=0):
                 "dword_",
                 "qword_",
             ]
-            for prefix in dummy_prefixes:
-                if name.startswith(prefix):
-                    name = "_" + name
-                    break
+            if any(name.startswith(prefix) for prefix in dummy_prefixes):
+                name = "_" + name
 
-        # Generate unique name if SN_FORCE is active
+        # Generar nombre único si SN_FORCE está activo
         original_name = name
         counter = 0
         if flags & SN_FORCE:
@@ -134,35 +116,27 @@ def set_name(ea, name, flags=0):
                 counter += 1
                 name = f"{original_name}_{counter}"
 
-        # Determine namespace (local vs global)
-        namespace = None
+        # Determinar namespace
         if flags & SN_LOCAL:
-            # Look for containing function for local namespace
-            function_manager = currentProgram.getFunctionManager()
+            function_manager = program.getFunctionManager()
             containing_function = function_manager.getFunctionContaining(addr)
             if containing_function is not None:
-                namespace = containing_function
+                namespace = containing_function.getName()
             else:
-                namespace = symbol_table.getGlobalNamespace()
+                namespace = program.getNamespaceManager().getGlobalNamespace()
         else:
-            namespace = symbol_table.getGlobalNamespace()
+            namespace = program.getNamespaceManager().getGlobalNamespace()
 
-        # Determine SourceType
-        source_type = SourceType.USER_DEFINED
-        if flags & SN_AUTO:
-            source_type = SourceType.DEFAULT
-        elif flags & SN_NON_AUTO:
-            source_type = SourceType.USER_DEFINED
+        # Determinar SourceType
+        source_type = (
+            SourceType.DEFAULT if (flags & SN_AUTO) else SourceType.USER_DEFINED
+        )
 
-        # Create or update symbol
-        new_symbol = None
-
-        if primary_symbol is not None:
-            # Update existing symbol
+        # Crear o actualizar símbolo
+        if primary_symbol:
             primary_symbol.setName(name, source_type)
             new_symbol = primary_symbol
         else:
-            # Create new symbol
             new_symbol = symbol_table.createLabel(addr, name, namespace, source_type)
 
         if new_symbol is None:
@@ -170,34 +144,9 @@ def set_name(ea, name, flags=0):
                 print(f"Warning: could not create/update symbol '{name}' at {addr}")
             return 0
 
-        # Apply visibility and property flags
-
-        # Public/non-public flags
+        # Aplicar flags adicionales
         if flags & SN_PUBLIC:
             new_symbol.setGlobal()
-        elif flags & SN_NON_PUBLIC:
-            # In Ghidra, local symbols are managed via namespace
-            # There's no direct setPrivate() method; it's namespace-based
-            pass
-
-        # Weak/non-weak flags
-        # Note: Ghidra doesn't have direct support for "weak" symbols like IDA does
-        # This would be disassembler-specific
-        if flags & SN_WEAK:
-            # Placeholder implementation – Ghidra doesn't directly support weak symbols
-            pass
-        elif flags & SN_NON_WEAK:
-            # Placeholder implementation
-            pass
-
-        # SN_NOLIST - exclude from name list
-        # Ghidra doesn't have a direct equivalent; handled in UI
-
-        # Handle SN_DELTAIL if necessary
-        if flags & SN_DELTAIL:
-            # Check for tail byte conflicts and resolve them if needed
-            # This would be case-specific
-            pass
 
         return 1
 
