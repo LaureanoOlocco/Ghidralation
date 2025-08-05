@@ -55,7 +55,7 @@ class Choose:
 
         for item in self.items:
             for k, v in enumerate(item):
-                print(str(list(self.res.keys())[k])+':',v,'| ', end='')
+                print(str(list(self.res.keys())[k]) + ":", v, "| ", end="")
             print()
         return True
 
@@ -90,7 +90,9 @@ def set_name(l_addr, comment, flags=SN_NOCHECK):
     minAddress = cp.currentProgram.minAddress.getOffset()
     if flags == SN_NOCHECK:
         # Precomment
-        cp.currentProgram.listing.setComment(fcp.toAddr(l_addr+minAddress), 1, comment)
+        cp.currentProgram.listing.setComment(
+            fcp.toAddr(l_addr + minAddress), 1, comment
+        )
 
 
 # currently in ida kernwin
@@ -99,8 +101,7 @@ class Form:
 
     def __init__(self, form, controls):
         self.form = form
-        self.txtFile = self.txtfile(0, path.join(
-            controls["txtFile"], "symbols.elf"))
+        self.txtFile = self.txtfile(0, path.join(controls["txtFile"], "symbols.elf"))
 
     class txtfile:
         def __init__(self, id, value):
