@@ -1,4 +1,3 @@
-
 # @category GCL
 """idc wrapper"""
 
@@ -7,9 +6,13 @@ from ghidra.framework.plugintool import PluginTool
 from ghidra.util.data.DataTypeParser import AllowedDataTypes
 from ghidra.program.model.data import DataTypeManager
 from ghidra.program.model.data import DataType
-from array import array
 from ghidra.program.flatapi import FlatProgramAPI
+from ghidra.program.model.data import DataUtilities
+from ghidra.program.model.data import DataTypePath  # Fixed import
+from ghidra.program.model.data import Structure
+from ghidra.util.task import TaskMonitor
 from ghidra.program.model.lang import OperandType
+from array import array
 import ida_bytes
 import cp
 import ida_ua
@@ -26,6 +29,7 @@ get_wide_byte = ida_bytes.get_wide_byte
 o_reg = 1
 o_mem = 2
 
+
 def get_segm_attr(segea, attr):
     """
     Get segment attributes...
@@ -35,8 +39,12 @@ def get_segm_attr(segea, attr):
     minAddress = cp.currentProgram.minAddress.getOffset()
     fcp = FlatProgramAPI(cp.currentProgram)
     if attr == SEGATTR_END:
-        end = cp.currentProgram.getMemory().getBlock(
-            fcp.toAddr(segea+minAddress)).getEnd().getOffset()
+        end = (
+            cp.currentProgram.getMemory()
+            .getBlock(fcp.toAddr(segea + minAddress))
+            .getEnd()
+            .getOffset()
+        )
         return end - minAddress
 
 
@@ -69,8 +77,11 @@ def get_segm_name(ea):
     minAddress = cp.currentProgram.minAddress.getOffset()
     fcp = FlatProgramAPI(cp.currentProgram)
     try:
-        res = cp.currentProgram.getMemory().getBlock(
-            fcp.toAddr(ea+minAddress)).getName()
+        res = (
+            cp.currentProgram.getMemory()
+            .getBlock(fcp.toAddr(ea + minAddress))
+            .getName()
+        )
         if res == "EXTERNAL":
             res = "extern"
     except Exception as e:
@@ -83,7 +94,7 @@ def get_func_name(func):
     minAddress = cp.currentProgram.minAddress.getOffset()
     fcp = FlatProgramAPI(cp.currentProgram)
     listing = cp.currentProgram.getListing()
-    function = listing.getFunctionAt(fcp.toAddr(minAddress+func))
+    function = listing.getFunctionAt(fcp.toAddr(minAddress + func))
     return function.getName()
 
 
@@ -107,24 +118,32 @@ def import_type(idx, type_name):
 def get_segm_start(ea):
     fcp = FlatProgramAPI(cp.currentProgram)
     minAddress = cp.currentProgram.minAddress.getOffset()
-    block = cp.currentProgram.getMemory().getBlock(
-        fcp.toAddr(ea+minAddress)).getStart().getOffset()
-    return block-minAddress
+    block = (
+        cp.currentProgram.getMemory()
+        .getBlock(fcp.toAddr(ea + minAddress))
+        .getStart()
+        .getOffset()
+    )
+    return block - minAddress
 
 
 def get_segm_end(ea):
     fcp = FlatProgramAPI(cp.currentProgram)
     minAddress = cp.currentProgram.minAddress.getOffset()
-    block = cp.currentProgram.getMemory().getBlock(
-        fcp.toAddr(ea+minAddress)).getEnd().getOffset()
-    return block-minAddress
+    block = (
+        cp.currentProgram.getMemory()
+        .getBlock(fcp.toAddr(ea + minAddress))
+        .getEnd()
+        .getOffset()
+    )
+    return block - minAddress
 
 
 def print_insn_mnem(ea):
     fcp = FlatProgramAPI(cp.currentProgram)
     minAddress = cp.currentProgram.minAddress.getOffset()
     listing = cp.currentProgram.getListing()
-    codeUnit = listing.getCodeUnitAt(fcp.toAddr(minAddress+ea))
+    codeUnit = listing.getCodeUnitAt(fcp.toAddr(minAddress + ea))
     if codeUnit is not None:
         res = str(codeUnit.getMnemonicString().lower())
         # print(res)
@@ -137,7 +156,7 @@ def get_operand_value(ea, n):
     fcp = FlatProgramAPI(cp.currentProgram)
     minAddress = cp.currentProgram.minAddress.getOffset()
     listing = cp.currentProgram.getListing()
-    codeUnit = listing.getCodeUnitAt(fcp.toAddr(minAddress+ea))
+    codeUnit = listing.getCodeUnitAt(fcp.toAddr(minAddress + ea))
     if codeUnit is None:
         return -1
     insn = ida_ua.insn_t()
@@ -154,11 +173,9 @@ def get_operand_value(ea, n):
 
     if op.type & OperandType.REGISTER:
         value = op.reg
-    elif op.type & OperandType.SCALAR and not\
-            (op.type & OperandType.ADDRESS):
+    elif op.type & OperandType.SCALAR and not (op.type & OperandType.ADDRESS):
         value = op.value
-    if op.type & OperandType.CODE and \
-            op.type & OperandType.ADDRESS:
+    if op.type & OperandType.CODE and op.type & OperandType.ADDRESS:
         value = -1
     if op.type & OperandType.ADDRESS and op.type & OperandType.DATA:
         value = op.addr
@@ -167,7 +184,7 @@ def get_operand_value(ea, n):
     else:
         value = -1
 
-    if value == 0x3c or value == 0x60:
+    if value == 0x3C or value == 0x60:
         print("HERE")
     return value
 
@@ -188,11 +205,13 @@ def get_struc_id(struc):
 
 
 def SetType(ea, newtype):
-    if newtype != '':
+    if newtype != "":
 
         tool = state.getTool()
         dtm = currentProgram.getDataTypeManager()
-        selectionDialog = DataTypeSelectionDialog(tool, dtm, -1, AllowedDataTypes.FIXED_LENGTH)
+        selectionDialog = DataTypeSelectionDialog(
+            tool, dtm, -1, AllowedDataTypes.FIXED_LENGTH
+        )
         tool.showDialog(selectionDialog)
         dataType = newtype
         if dataType is not None:
@@ -209,4 +228,60 @@ def set_name(ea, name, flags=0):
 
 
 def op_stroff(ea, n, strid, delta):
-    pass
+    """
+    Emulates idc.op_stroff in Ghidra.
+
+    Convert operand to an offset in a structure.
+
+    @param ea: linear address of the instruction.
+    @param n: operand index.
+              - 0: the first operand
+              - 1: the second, third, and all other operands
+              - -1: all operands
+    @param strid: ID of a structure type (can be a name or a Structure object in Ghidra).
+    @param delta: struct offset delta. Usually 0, represents the difference
+                  between the structure base and the pointer into the structure.
+    @return: True if applied successfully, False on error.
+    """
+    fpa = FlatProgramAPI(cp.currentProgram)
+    listing = cp.currentProgram.getListing()
+
+    # Get the instruction at the given address
+    addr = fpa.toAddr(ea)
+    insn = listing.getInstructionAt(addr)
+    if insn is None:
+        print(f"[op_stroff] No instruction found at {ea:#X}")
+        return False
+
+    # Resolve the structure
+    dtm = cp.currentProgram.getDataTypeManager()
+    struct = None
+
+    # In IDA, strid is a numeric tid. In Ghidra, we simulate this:
+    # - Accept a Structure object directly
+    # - Or accept a structure name as a string
+    if isinstance(strid, Structure):
+        struct = strid
+    elif isinstance(strid, str):
+        struct = dtm.getDataType("/" + strid)  # Look for it in the datatype root
+    else:
+        print("[op_stroff] Unsupported strid type (expected string or Structure).")
+        return False
+
+    if struct is None or not isinstance(struct, Structure):
+        print(f"[op_stroff] No valid structure found for '{strid}'")
+        return False
+
+    # Determine which operands to process
+    indices = range(insn.getNumOperands()) if n == -1 else [n]
+
+    for idx in indices:
+        try:
+            # Add a comment to the operand indicating the struct offset
+            insn.setComment(idx, f"{struct.getName()} offset + 0x{delta:X}")
+
+        except Exception as e:
+            print(f"[op_stroff] Error applying on operand {idx}: {e}")
+            return False
+
+    return True

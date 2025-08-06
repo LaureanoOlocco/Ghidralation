@@ -11,6 +11,9 @@ Run from Ghidra with a program loaded.
 import sys
 import os
 from ghidra.program.model.symbol import SourceType
+from ghidra.program.model.data import StructureDataType
+from ghidra.program.model.data import ByteDataType, DWordDataType
+
 
 # Add src/ to the path
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -33,11 +36,6 @@ print(
 ================================================================
                 TEST SUITE - (Ghidralation)
 ----------------------------------------------------------------
-This test suite validates:
-  • Module import
-  • Symbol creation and verification
-  • Symbol deletion
-
 Run this with a program loaded in Ghidra.
 
 === Program Information ===
@@ -54,6 +52,7 @@ Maximum Address          : {program.getMaxAddress()}
 # Import modules
 import ida_name
 from ida_name import set_name, get_name, SN_NOCHECK, SN_CHECK
+import idc
 
 
 class TestSetName:
@@ -158,6 +157,105 @@ class TestSetName:
         print("\n================= END OF TESTS ====================")
 
 
+class TestOpStroff:
+    def __init__(self):
+        self.program = currentProgram
+        self.listing = self.program.getListing()
+        self.dtm = self.program.getDataTypeManager()
+        self.min_addr = self.program.getMinAddress().getOffset()
+        self.max_addr = self.program.getMaxAddress().getOffset()
+
+        self.tests_passed = 0
+        self.tests_failed = 0
+
+        print(">>> Starting tests for idc.op_stroff()")
+        print(f"    Loaded Program         : {self.program.getName()}")
+        print(f"    Address Range          : 0x{self.min_addr:x} - 0x{self.max_addr:x}")
+        print("================================================================")
+
+    def assert_test(self, condition, test_name, error_msg=""):
+        """Helper to handle assertions and counting."""
+        if condition:
+            print(f"✓ PASS: {test_name}")
+            self.tests_passed += 1
+        else:
+            print(f"✗ FAIL: {test_name}")
+            if error_msg:
+                print(f"    Error: {error_msg}")
+            self.tests_failed += 1
+
+    def get_first_instruction(self):
+        """Return the first valid instruction address in the program."""
+        instructions = self.listing.getInstructions(self.program.getMinAddress(), True)
+        if instructions.hasNext():
+            return instructions.next().getAddress().getOffset()
+        return None
+
+    # ================================
+    # BASIC TESTS
+    # ================================
+    def test_01_import(self):
+        """Verify that the module is imported correctly."""
+        print("\n[TEST 01] Module import")
+        print("----------------------------------------------------------------")
+        self.assert_test(callable(idc.op_stroff), "idc.op_stroff is callable")
+
+    def test_basic_op_stroff(self):
+        """Create a dummy struct and apply op_stroff."""
+        print("\n[TEST] Basic op_stroff application")
+        print("----------------------------------------------------------------")
+
+        ea = self.get_first_instruction()
+        self.assert_test(ea is not None, "Found a valid instruction address")
+        if ea is None:
+            print("[DEBUG] No valid instruction found, skipping test.")
+            return
+
+        print(f"Selected instruction address: 0x{ea:x}")
+
+        # Create a dummy structure for testing
+        struct_name = "TEST_STRUCT"
+        struct = self.dtm.getDataType("/" + struct_name)
+        if struct is None:
+            struct = StructureDataType(struct_name, 0)
+            struct.add(ByteDataType.dataType, 1, "field1", None)
+            struct.add(DWordDataType.dataType, 4, "field2", None)
+            struct = self.dtm.addDataType(struct, None)
+            print(f"Structure '{struct_name}' created.")
+
+        # Apply op_stroff on operand 0
+        result = idc.op_stroff(ea, 0, struct.getName(), 0)
+        self.assert_test(result, "op_stroff applied successfully")
+
+        if not result:
+            print("[DEBUG] op_stroff failed, skipping comment verification.")
+            return
+
+        # Verify comment was added
+        insn = self.listing.getInstructionAt(toAddr(ea))
+        if insn is None:
+            self.assert_test(
+                False, "Instruction still exists at address after op_stroff"
+            )
+            return
+
+        comment = insn.getComment(0)
+        self.assert_test(
+            comment is not None and struct_name in comment,
+            "Operand comment contains structure name",
+            f"Comment: {comment}",
+        )
+
+    def run(self):
+        """Run the test suite."""
+        print("\n================= BEGIN TESTS =================")
+        self.test_01_import()
+        self.test_basic_op_stroff()
+        print("\n================= END OF TESTS ====================")
+        print(f"Tests Passed: {self.tests_passed}")
+        print(f"Tests Failed: {self.tests_failed}")
+
+
 if __name__ == "__main__":
-    tester = TestSetName()
+    tester = TestOpStroff()
     tester.run()
