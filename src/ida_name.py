@@ -68,7 +68,7 @@ def set_name(ea, name, flags=0):
     if addr is None:
         return 0
 
-    # Get symbol table
+        # Get symbol table
     symbol_table = program.getSymbolTable()
 
     # Validate name if SN_CHECK is active
@@ -85,7 +85,7 @@ def set_name(ea, name, flags=0):
             if name and not re.match(r"^[a-zA-Z_]", name):
                 name = "_" + name
 
-    # Find existing symbol
+                # Find existing symbol
     existing_symbols = symbol_table.getSymbols(addr)
     primary_symbol = next((sym for sym in existing_symbols if sym.isPrimary()), None)
 
@@ -96,7 +96,7 @@ def set_name(ea, name, flags=0):
                 symbol_table.removeSymbolSpecial(primary_symbol)
             return 1
 
-        # Apply SN_NODUMMY
+            # Apply SN_NODUMMY
         if flags & SN_NODUMMY:
             dummy_prefixes = [
                 "sub_",
@@ -110,7 +110,7 @@ def set_name(ea, name, flags=0):
             if any(name.startswith(prefix) for prefix in dummy_prefixes):
                 name = "_" + name
 
-        # Generate unique name if SN_FORCE is active
+                # Generate unique name if SN_FORCE is active
         original_name = name
         counter = 0
         if flags & SN_FORCE:
@@ -118,7 +118,7 @@ def set_name(ea, name, flags=0):
                 counter += 1
                 name = f"{original_name}_{counter}"
 
-        # Determine namespace
+                # Determine namespace
         if flags & SN_LOCAL:
             function_manager = program.getFunctionManager()
             containing_function = function_manager.getFunctionContaining(addr)
@@ -129,7 +129,7 @@ def set_name(ea, name, flags=0):
         else:
             namespace = program.getNamespaceManager().getGlobalNamespace()
 
-        # Determine SourceType
+            # Determine SourceType
         source_type = (
             SourceType.DEFAULT if (flags & SN_AUTO) else SourceType.USER_DEFINED
         )
@@ -146,7 +146,7 @@ def set_name(ea, name, flags=0):
                 print(f"Warning: could not create/update symbol '{name}' at {addr}")
             return 0
 
-        # Apply additional flags
+            # Apply additional flags
         if flags & SN_PUBLIC:
             new_symbol.setGlobal()
 
@@ -165,8 +165,9 @@ def set_name(ea, name, flags=0):
             print(f"Warning: unexpected error: {str(e)}")
         return 0
 
+        # Helper functions for easier flag usage
 
-# Helper functions for easier flag usage
+
 def set_name_checked(ea, name):
     """Set name with character validation"""
     return set_name(ea, name, SN_CHECK)
