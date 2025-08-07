@@ -22,3 +22,7 @@ Thumbs.db
 
 # Logs
 *.log
+
+# ignore plugins directory
+plugins/
+plugins/*
