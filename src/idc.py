@@ -21,8 +21,9 @@ import ida_name
 
 SEGATTR_END = 8
 BADADDR = -1
+USE_DEFAULT_LENGTH = 0
 
-get_name = ida_name.get_name
+# get_name = ida_name.get_name
 set_cmt = ida_bytes.set_cmt
 get_wide_word = ida_bytes.get_wide_word
 get_wide_dword = ida_bytes.get_wide_dword
@@ -84,9 +85,9 @@ def GetString(address, length):
     return: a bytes-filled str object.
     """
     res = b""
-    fcp = FlatProgramAPI(cp.currentProgram)
+    program_api = FlatProgramAPI(cp.currentProgram)
     try:
-        res = fcp.getBytes(fcp.toAddr(address), length + 1)
+        res = program_api.getBytes(program_api.toAddr(address), length + 1)
         res = res.tolist()
         res = [i if i >= 0 else (256 + i) for i in res]
         res = array("B", res).tobytes()
@@ -283,14 +284,14 @@ def SetType(ea, newtype):
                 listing.clearCodeUnits(addr, addr, False)
             return 1
 
-        parser = DataTypeParser(cp.currentProgram, None)
+        parser = DataTypeParser(fpa, None)
         dt = parser.parse(newtype)
 
         DataUtilities.createData(
             cp.currentProgram,
             addr,
             dt,
-            0,
+            USE_DEFAULT_LENGTH,
             False,
             DataUtilities.ClearDataMode.CLEAR_ALL_UNDEFINED_CONFLICT_DATA,
         )
@@ -301,7 +302,26 @@ def SetType(ea, newtype):
         return 0
 
 
+def get_name(ea, flags=0):
+    """
+    Get name at the specified address
+
+    @param ea: linear address
+    @param gtn_flags: how exactly the name should be retrieved.
+                      combination of GN_ bits
+    """
+    pass
+
+
 def set_name(ea, name, flags=0):
+    """
+    Rename an address
+
+    @param ea: linear address
+    @param name: new name of address. If name == "", then delete old name
+    @param flags: combination of SN_... constants
+    @return: 1-ok, 0-failed.
+    """
     pass
 
 
@@ -321,11 +341,11 @@ def op_stroff(ea, n, strid, delta):
                   between the structure base and the pointer into the structure.
     @return: True if applied successfully, False on error.
     """
-    fpa, min_address = get_program_context()
+    program_api, min_address = get_program_context()
     listing = cp.currentProgram.getListing()
     dtm = cp.currentProgram.getDataTypeManager()
 
-    addr = fpa.toAddr(ea)
+    addr = program_api.toAddr(ea)
     insn = listing.getInstructionAt(addr)
     if insn is None:
         print(f"[op_stroff] No instruction found at {ea:#X}")
