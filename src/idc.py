@@ -8,8 +8,9 @@ from ghidra.program.model.data import DataTypeManager
 from ghidra.program.model.data import DataType
 from ghidra.program.flatapi import FlatProgramAPI
 from ghidra.program.model.data import DataUtilities
-from ghidra.program.model.data import DataTypePath  # Fixed import
+from ghidra.program.model.data import DataTypePath
 from ghidra.program.model.data import Structure
+from ghidra.util.data import DataTypeParser
 from ghidra.util.task import TaskMonitor
 from ghidra.program.model.lang import OperandType
 from array import array
@@ -19,6 +20,7 @@ import ida_ua
 import ida_name
 
 SEGATTR_END = 8
+BADADDR = -1
 
 get_name = ida_name.get_name
 set_cmt = ida_bytes.set_cmt
@@ -30,22 +32,48 @@ o_reg = 1
 o_mem = 2
 
 
-def get_segm_attr(segea, attr):
+def get_program_context():
     """
-    Get segment attributes...
-    @param segea: any address within segment
-    @param attr: segment attributes as per ida config, define by need.
+    Get reusable program context: FlatProgramAPI and minAddress.
+
+    @return: (program_api, minAddress)
     """
-    minAddress = cp.currentProgram.minAddress.getOffset()
-    fcp = FlatProgramAPI(cp.currentProgram)
+    program_api = FlatProgramAPI(cp.currentProgram)
+    min_address = cp.currentProgram.getMinAddress().getOffset()
+    return program_api, min_address
+
+
+def get_memory_block_at_address(ea):
+    """
+    Get the memory block containing the given EA.
+
+    @param ea: IDA-style offset (relative to minAddress)
+    @return: MemoryBlock object or None if not found
+    """
+    program_api, min_address = get_program_context()
+    addr = program_api.toAddr(ea + min_address)
+    return cp.currentProgram.getMemory().getBlock(addr)
+
+
+def get_segm_attr(ea, attr):
+    """
+    Get segment attribute value by EA.
+
+    @param ea: any address in the segment (IDA-style EA)
+    @param attr: attribute (currently only SEGATTR_END supported)
+    @return: attribute value (IDA-style EA), or BADADDR if invalid
+    """
+    block = get_memory_block_at_address(ea)
+    if block is None:
+        return BADADDR
+
+    _, min_address = get_program_context()
+
     if attr == SEGATTR_END:
-        end = (
-            cp.currentProgram.getMemory()
-            .getBlock(fcp.toAddr(segea + minAddress))
-            .getEnd()
-            .getOffset()
-        )
-        return end - minAddress
+        return block.getEnd().getOffset() - min_address
+
+    print(f"[WARN] Unsupported segment attribute: {attr}")
+    return BADADDR
 
 
 def GetString(address, length):
@@ -70,32 +98,40 @@ def GetString(address, length):
 
 def get_segm_name(ea):
     """
-    @param ea: address
-    returns: name of function's segment or empty string in case of failure
+    Get name of a segment
+
+    @param ea: any address in the segment
+
+    @return: segment name
+             "" - no segment at the specified address
     """
-    res = ""
-    minAddress = cp.currentProgram.minAddress.getOffset()
-    fcp = FlatProgramAPI(cp.currentProgram)
-    try:
-        res = (
-            cp.currentProgram.getMemory()
-            .getBlock(fcp.toAddr(ea + minAddress))
-            .getName()
-        )
-        if res == "EXTERNAL":
-            res = "extern"
-    except Exception as e:
-        print("Failed to get segment", str(e))
-    finally:
-        return res
+    block = get_memory_block_at_address(ea)
+    if block is None:
+        return ""
+
+    name = block.getName()
+    if name == "EXTERNAL":
+        return "extern"
+
+    return name
 
 
-def get_func_name(func):
-    minAddress = cp.currentProgram.minAddress.getOffset()
-    fcp = FlatProgramAPI(cp.currentProgram)
+def get_func_name(ea):
+    """
+    Retrieve function name
+
+    @param ea: any address belonging to the function
+    @return: null string - function doesn't exist
+             otherwise returns function name
+    """
+    program_api, min_address = get_program_context()
     listing = cp.currentProgram.getListing()
-    function = listing.getFunctionAt(fcp.toAddr(minAddress + func))
-    return function.getName()
+    func = listing.getFunctionAt(program_api.toAddr(min_address + ea))
+
+    if func is None:
+        return ""
+
+    return func.getName()
 
 
 def auto_wait():
@@ -116,27 +152,35 @@ def import_type(idx, type_name):
 
 
 def get_segm_start(ea):
-    fcp = FlatProgramAPI(cp.currentProgram)
-    minAddress = cp.currentProgram.minAddress.getOffset()
-    block = (
-        cp.currentProgram.getMemory()
-        .getBlock(fcp.toAddr(ea + minAddress))
-        .getStart()
-        .getOffset()
-    )
-    return block - minAddress
+    """
+    Get start address of a segment.
+
+    @param ea: any address in the segment
+    @return: start of segment
+             BADADDR - the specified address doesn't belong to any segment
+    """
+    block = get_memory_block_at_address(ea)
+    if block is None:
+        return BADADDR
+
+    _, min_address = get_program_context()
+    return block.getStart().getOffset() - min_address
 
 
 def get_segm_end(ea):
-    fcp = FlatProgramAPI(cp.currentProgram)
-    minAddress = cp.currentProgram.minAddress.getOffset()
-    block = (
-        cp.currentProgram.getMemory()
-        .getBlock(fcp.toAddr(ea + minAddress))
-        .getEnd()
-        .getOffset()
-    )
-    return block - minAddress
+    """
+    Get end address of a segment
+
+    @param ea: any address in the segment
+    @return: end of segment
+             BADADDR - the specified address doesn't belong to any segment
+    """
+    block = get_memory_block_at_address(ea)
+    if block is None:
+        return BADADDR
+
+    _, min_address = get_program_context()
+    return block.getEnd().getOffset() - min_address
 
 
 def print_insn_mnem(ea):
@@ -153,39 +197,50 @@ def print_insn_mnem(ea):
 
 
 def get_operand_value(ea, n):
-    fcp = FlatProgramAPI(cp.currentProgram)
-    minAddress = cp.currentProgram.minAddress.getOffset()
+    """
+    Get number used in the operand
+
+    This function returns an immediate number used in the operand
+
+    @param ea: linear address of instruction
+    @param n: the operand number
+
+    @return: value
+        operand is an immediate value  => immediate value
+        operand has a displacement     => displacement
+        operand is a direct memory ref => memory address
+        operand is a register          => register number
+        operand is a register phrase   => phrase number
+        otherwise                      => -1
+    """
+    program_api, min_address = get_program_context()
     listing = cp.currentProgram.getListing()
-    codeUnit = listing.getCodeUnitAt(fcp.toAddr(minAddress + ea))
-    if codeUnit is None:
+    code_unit = listing.getCodeUnitAt(program_api.toAddr(ea + min_address))
+
+    if code_unit is None:
         return -1
+
     insn = ida_ua.insn_t()
     inslen = ida_ua.decode_insn(insn, ea)
-    if inslen == 0 or n >= codeUnit.getNumOperands():
+    if inslen == 0 or n >= code_unit.getNumOperands():
         return -1
-    fout = open("corresp.txt", "a")
-    for inst in insn.ops:
-        fout.write("{}:{}\n".format(codeUnit.toString(), vars(inst)))
-    fout.close()
-    op, value = insn.ops[n], -1
+
+    op = insn.ops[n]
     if not op:
         return -1
 
-    if op.type & OperandType.REGISTER:
-        value = op.reg
-    elif op.type & OperandType.SCALAR and not (op.type & OperandType.ADDRESS):
-        value = op.value
-    if op.type & OperandType.CODE and op.type & OperandType.ADDRESS:
-        value = -1
-    if op.type & OperandType.ADDRESS and op.type & OperandType.DATA:
-        value = op.addr
-    if op.type & OperandType.ADDRESS and op.type & OperandType.SCALAR:
-        value = op.addr
-    else:
-        value = -1
+    value = -1
 
-    if value == 0x3C or value == 0x60:
-        print("HERE")
+    if op.type & OperandType.REGISTER:
+        value = op.reg  # Register number
+    elif op.type & OperandType.SCALAR and not (op.type & OperandType.ADDRESS):
+        value = op.value  # Immediate value or displacement
+    elif op.type & OperandType.ADDRESS:
+        if op.type & OperandType.DATA or op.type & OperandType.SCALAR:
+            value = op.addr  # Direct memory reference
+        elif op.type & OperandType.CODE:
+            value = -1  # Code reference, not handled here
+
     return value
 
 
@@ -205,22 +260,45 @@ def get_struc_id(struc):
 
 
 def SetType(ea, newtype):
-    if newtype != "":
+    """
+    Set type of function/variable
 
-        tool = state.getTool()
-        dtm = currentProgram.getDataTypeManager()
-        selectionDialog = DataTypeSelectionDialog(
-            tool, dtm, -1, AllowedDataTypes.FIXED_LENGTH
+    @param ea: the address of the object
+    @param newtype: the type string in C declaration form.
+                    Must contain the closing ';'
+                    If specified as an empty string, the
+                    item associated with 'ea' will be deleted.
+
+    @return: 1-ok, 0-failed.
+    """
+    try:
+        fpa, min_addr = get_program_context()
+        addr = fpa.toAddr(min_addr + ea)
+        listing = cp.currentProgram.getListing()
+
+        if newtype == "":
+            # Delete any defined data at that address
+            existing = listing.getDefinedDataAt(addr)
+            if existing:
+                listing.clearCodeUnits(addr, addr, False)
+            return 1
+
+        parser = DataTypeParser(cp.currentProgram, None)
+        dt = parser.parse(newtype)
+
+        DataUtilities.createData(
+            cp.currentProgram,
+            addr,
+            dt,
+            0,
+            False,
+            DataUtilities.ClearDataMode.CLEAR_ALL_UNDEFINED_CONFLICT_DATA,
         )
-        tool.showDialog(selectionDialog)
-        dataType = newtype
-        if dataType is not None:
-            print("Chosen data type: " + str(dataType))
-            pt = parse_decl(newtype, PT_SIL)
-    if pt is None:
-        # parsing failed
-        return None
-    pass
+        return 1
+
+    except Exception as e:
+        print(f"[SetType] Failed to apply type '{newtype}' at {ea:#X}: {e}")
+        return 0
 
 
 def set_name(ea, name, flags=0):
@@ -235,18 +313,18 @@ def op_stroff(ea, n, strid, delta):
 
     @param ea: linear address of the instruction.
     @param n: operand index.
-              - 0: the first operand
-              - 1: the second, third, and all other operands
+              -  0: the first operand
+              -  1: the second, third, and all other operands
               - -1: all operands
     @param strid: ID of a structure type (can be a name or a Structure object in Ghidra).
     @param delta: struct offset delta. Usually 0, represents the difference
                   between the structure base and the pointer into the structure.
     @return: True if applied successfully, False on error.
     """
-    fpa = FlatProgramAPI(cp.currentProgram)
+    fpa, min_address = get_program_context()
     listing = cp.currentProgram.getListing()
+    dtm = cp.currentProgram.getDataTypeManager()
 
-    # Get the instruction at the given address
     addr = fpa.toAddr(ea)
     insn = listing.getInstructionAt(addr)
     if insn is None:
@@ -254,16 +332,10 @@ def op_stroff(ea, n, strid, delta):
         return False
 
     # Resolve the structure
-    dtm = cp.currentProgram.getDataTypeManager()
-    struct = None
-
-    # In IDA, strid is a numeric tid. In Ghidra, we simulate this:
-    # - Accept a Structure object directly
-    # - Or accept a structure name as a string
     if isinstance(strid, Structure):
         struct = strid
     elif isinstance(strid, str):
-        struct = dtm.getDataType("/" + strid)  # Look for it in the datatype root
+        struct = dtm.getDataType("/" + strid)
     else:
         print("[op_stroff] Unsupported strid type (expected string or Structure).")
         return False
@@ -277,8 +349,28 @@ def op_stroff(ea, n, strid, delta):
 
     for idx in indices:
         try:
-            # Add a comment to the operand indicating the struct offset
-            insn.setComment(idx, f"{struct.getName()} offset + 0x{delta:X}")
+            operand_type = insn.getOperandType(idx)
+            if not OperandType.isAddress(operand_type):
+                continue
+
+            operand_refs = insn.getOperandReferences(idx)
+            if not operand_refs:
+                continue
+
+            target = operand_refs[0].getToAddress()
+
+            # Create the structure at the referenced address
+            DataUtilities.createData(
+                cp.currentProgram,
+                target,
+                struct,
+                delta,
+                False,
+                DataUtilities.ClearDataMode.CLEAR_ALL_UNDEFINED_CONFLICT_DATA,
+            )
+
+            # Add a comment (optional, visual aid)
+            insn.setComment(CodeUnit.EOL_COMMENT, f"{struct.getName()}+0x{delta:X}")
 
         except Exception as e:
             print(f"[op_stroff] Error applying on operand {idx}: {e}")
