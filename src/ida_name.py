@@ -6,7 +6,7 @@ from ghidra.program.model.symbol import SourceType
 from ghidra.util.exception import DuplicateNameException, InvalidInputException
 from ghidra.program.model.address import Address
 
-# SN_ Constants (Set Name flags)
+# SN_ Constants (set_name() flags)
 SN_CHECK = 0x00  # Fail if the name contains invalid characters.
 SN_NOCHECK = 0x01  # Don't fail, replace invalid chars with '_'
 SN_PUBLIC = 0x02  # Make name public
@@ -26,6 +26,17 @@ SN_NODUMMY = 0x1000  # Prepend '_' if the name starts with a dummy prefix like '
 SN_DELTAIL = (
     0x2000  # If name cannot be set due to a tail byte, delete the hindering item
 )
+
+# GN_ Constants (get_name() flags)
+GN_VISIBLE = 0x0001  # Replace forbidden characters by SUBSTCHAR
+GN_COLORED = 0x0002  # Return colored name (not used in Ghidra)
+GN_DEMANGLED = 0x0004  # Return demangled name
+GN_STRICT = 0x0008  # Fail if cannot demangle
+GN_SHORT = 0x0010  # Use short form of demangled name
+GN_LONG = 0x0020  # Use long form of demangled name
+GN_LOCAL = 0x0040  # Try to get local name first; fallback to global
+GN_ISRET = 0x0080  # For dummy names: use return location
+GN_NOT_ISRET = 0x0100  # For dummy names: do not use return location
 
 
 def get_name(ea, flags):
@@ -62,7 +73,7 @@ def set_name(ea, name, flags=0):
         addr = addr_factory.getDefaultAddressSpace().getAddress(ea)
     except Exception:
         if not (flags & SN_NOWARN):
-            print(f"Warning: invalid address {ea}")
+            print(f"[WARN] invalid address {ea}")
         return 0
 
     if addr is None:
@@ -77,7 +88,7 @@ def set_name(ea, name, flags=0):
     if not (flags & SN_NOCHECK):
         if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", name) and name != "":
             if not (flags & SN_NOWARN):
-                print(f"Warning: invalid name '{name}' contains invalid characters")
+                print(f"[WARN] invalid name '{name}' contains invalid characters")
             return 0
     else:
         if name != "":
@@ -143,7 +154,7 @@ def set_name(ea, name, flags=0):
 
         if new_symbol is None:
             if not (flags & SN_NOWARN):
-                print(f"Warning: could not create/update symbol '{name}' at {addr}")
+                print(f"[WARN] could not create/update symbol '{name}' at {addr}")
             return 0
 
             # Apply additional flags
@@ -154,15 +165,15 @@ def set_name(ea, name, flags=0):
 
     except DuplicateNameException:
         if not (flags & SN_NOWARN):
-            print(f"Warning: the name '{name}' already exists.")
+            print(f"[WARN] the name '{name}' already exists.")
         return 0
     except InvalidInputException:
         if not (flags & SN_NOWARN):
-            print(f"Warning: invalid name '{name}'.")
+            print(f"[WARN] invalid name '{name}'.")
         return 0
     except Exception as e:
         if not (flags & SN_NOWARN):
-            print(f"Warning: unexpected error: {str(e)}")
+            print(f"[WARN] unexpected error: {str(e)}")
         return 0
 
         # Helper functions for easier flag usage
@@ -198,22 +209,31 @@ def set_name_force(ea, name):
     return set_name(ea, name, SN_FORCE | SN_NOCHECK)
 
 
-__all__ = [
-    "set_name",
-    "get_name",
-    "SN_CHECK",
-    "SN_NOCHECK",
-    "SN_PUBLIC",
-    "SN_NON_PUBLIC",
-    "SN_WEAK",
-    "SN_NON_WEAK",
-    "SN_AUTO",
-    "SN_NON_AUTO",
-    "SN_NOLIST",
-    "SN_NOWARN",
-    "SN_LOCAL",
-    "SN_IDBENC",
-    "SN_FORCE",
-    "SN_NODUMMY",
-    "SN_DELTAIL",
-]
+# __all__ = [
+#    "set_name",
+#    "get_name",
+#    "SN_CHECK",
+#    "SN_NOCHECK",
+#    "SN_PUBLIC",
+#    "SN_NON_PUBLIC",
+#    "SN_WEAK",
+#    "SN_NON_WEAK",
+#    "SN_AUTO",
+#    "SN_NON_AUTO",
+#    "SN_NOLIST",
+#    "SN_NOWARN",
+#    "SN_LOCAL",
+#    "SN_IDBENC",
+#    "SN_FORCE",
+#    "SN_NODUMMY",
+#    "SN_DELTAIL",
+#    "GN_VISIBLE",
+#    "GN_COLORED",
+#    "GN_DEMANGLED",
+#    "GN_STRICT",
+#    "GN_SHORT",
+#    "GN_LONG",
+#    "GN_LOCAL",
+#    "GN_ISRET",
+#    "GN_NOT_ISRET",
+# ]
