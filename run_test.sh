@@ -4,7 +4,6 @@ PROJECT_DIR="/home/eclypsium/Documents/GhidraProjects"
 PROJECT_NAME="syms2elf"
 BINARY_NAME="crypto_binary"
 SCRIPT_PATH="/home/eclypsium/Documents/Ghidralation/test/test_suite.py"
-# Test singin
 
 "$GHIDRA_SUPPORT/pyghidraRun" --headless "$PROJECT_DIR" "$PROJECT_NAME" \
   -process "$BINARY_NAME" \
