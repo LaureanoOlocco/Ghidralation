@@ -2,10 +2,12 @@
 """idc wrapper"""
 
 from ghidra.app.util.datatype import DataTypeSelectionDialog
+from ghidra.app.util.datatype import DataTypeConflictHandler
 from ghidra.framework.plugintool import PluginTool
 from ghidra.util.data.DataTypeParser import AllowedDataTypes
 from ghidra.program.model.data import DataTypeManager
 from ghidra.program.model.data import DataType
+from ghidra.program.model.data import BuiltInDataTypeManager
 from ghidra.program.flatapi import FlatProgramAPI
 from ghidra.program.model.data import DataUtilities
 from ghidra.program.model.data import DataTypePath
@@ -19,9 +21,15 @@ import cp
 import ida_ua
 import ida_name
 
-SEGATTR_END = 8
+SEGATTR_START = 0
+SEGATTR_END = 4
 BADADDR = -1
+BADNODE = -1  # IDA's BADNODE constant for type/node errors
 USE_DEFAULT_LENGTH = 0
+
+# Segment name constants
+EXTERNAL_SEGMENT_NAME = "EXTERNAL"
+EXTERN_SEGMENT_ALIAS = "extern"
 
 # get_name = ida_name.get_name
 set_cmt = ida_bytes.set_cmt
@@ -61,7 +69,7 @@ def get_segm_attr(ea, attr):
     Get segment attribute value by EA.
 
     @param ea: any address in the segment (IDA-style EA)
-    @param attr: attribute (currently only SEGATTR_END supported)
+    @param attr: attribute (SEGATTR_START or SEGATTR_END supported)
     @return: attribute value (IDA-style EA), or BADADDR if invalid
     """
     block = get_memory_block_at_address(ea)
@@ -70,7 +78,9 @@ def get_segm_attr(ea, attr):
 
     _, min_address = get_program_context()
 
-    if attr == SEGATTR_END:
+    if attr == SEGATTR_START:
+        return block.getStart().getOffset() - min_address
+    elif attr == SEGATTR_END:
         return block.getEnd().getOffset() - min_address
 
     print(f"[WARN] Unsupported segment attribute: {attr}")
@@ -111,8 +121,8 @@ def get_segm_name(ea):
         return ""
 
     name = block.getName()
-    if name == "EXTERNAL":
-        return "extern"
+    if name == EXTERNAL_SEGMENT_NAME:
+        return EXTERN_SEGMENT_ALIAS
 
     return name
 
@@ -140,16 +150,59 @@ def auto_wait():
 
 
 def import_type(idx, type_name):
-    if type_name == "EFI_GUID":
-        return 1
-    elif type_name == "EFI_SYSTEM_TABLE":
-        return 2
-    elif type_name == "EFI_RUNTIME_SERVICES":
-        return 3
-    elif type_name == "EFI_BOOT_SERVICES":
-        return 4
-    else:
-        return 5
+    """
+    Import a type from type libraries into the current program.
+
+    This function searches through available DataTypeManagers (type libraries)
+    in Ghidra to find a type matching the given name, then imports it into the
+    current program's DataTypeManager.
+
+    @param idx: Index position for the new type (-1 for end of list, typically ignored in Ghidra)
+    @param type_name: Name of the type to import (structure, union, or enum)
+    @return: UniversalID hash code on success, BADNODE (-1) on failure
+
+    Searches in order:
+    1. Current program's DataTypeManager (if already exists)
+    2. Built-in types
+    """
+    try:
+        dtm = cp.currentProgram.getDataTypeManager()
+
+        # First check if type already exists in current program
+        existing = dtm.getDataType("/" + type_name)
+        if existing is not None:
+            uid = existing.getUniversalID()
+            return uid.hashCode() if uid else existing.getName().hashCode()
+
+        # Search built-in types
+        builtin_mgr = BuiltInDataTypeManager.getDataTypeManager()
+        found_type = builtin_mgr.getDataType("/" + type_name)
+
+        if found_type is None:
+            # Try searching by name (may return multiple matches)
+            results = []
+            builtin_mgr.findDataTypes(type_name, results)
+            if len(results) > 0:
+                found_type = results[0]
+
+        if found_type is None:
+            print(f"[import_type] Type '{type_name}' not found in type libraries")
+            return BADNODE
+
+        # Import into current program using resolve()
+        imported = dtm.resolve(found_type, DataTypeConflictHandler.DEFAULT_HANDLER)
+
+        if imported is None:
+            print(f"[import_type] Failed to import type '{type_name}'")
+            return BADNODE
+
+        # Return the type ID (using UniversalID hash code)
+        uid = imported.getUniversalID()
+        return uid.hashCode() if uid else imported.getName().hashCode()
+
+    except Exception as e:
+        print(f"[import_type] Error importing '{type_name}': {e}")
+        return BADNODE
 
 
 def get_segm_start(ea):
@@ -254,10 +307,41 @@ def prev_head(ea, minea=cp.currentProgram.minAddress.getOffset()):
 
 
 def get_struc_id(struc):
-    if struc == "EFI_GUID":
-        return 1
-    elif struc == "EFI_BOOT_SERVICES":
-        return 2
+    """
+    Get structure ID by name.
+
+    @param struc: Name of the structure type
+    @return: Structure ID (UniversalID hash code), or BADNODE if not found
+    """
+    try:
+        dtm = cp.currentProgram.getDataTypeManager()
+
+        # Try to find the structure by name
+        found_struct = dtm.getDataType("/" + struc)
+
+        if found_struct is None:
+            # Try searching by name
+            results = []
+            dtm.findDataTypes(struc, results)
+            if len(results) > 0:
+                found_struct = results[0]
+
+        if found_struct is None:
+            print(f"[get_struc_id] Structure '{struc}' not found")
+            return BADNODE
+
+        # Verify it's actually a structure
+        if not isinstance(found_struct, Structure):
+            print(f"[get_struc_id] '{struc}' is not a structure type")
+            return BADNODE
+
+        # Return the structure ID (using UniversalID hash code)
+        uid = found_struct.getUniversalID()
+        return uid.hashCode() if uid else found_struct.getName().hashCode()
+
+    except Exception as e:
+        print(f"[get_struc_id] Error getting structure ID for '{struc}': {e}")
+        return BADNODE
 
 
 def SetType(ea, newtype):

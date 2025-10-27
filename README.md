@@ -34,7 +34,7 @@ The core idea is to make IDA plugins think they are running inside IDA. Ghidrala
 ### GUI Mode
 
 1. **Place the plugin folder inside your Ghidra project**
-   - Copy your IDA plugin (e.g., `findcrypt3.py`) to a folder.
+   - Load your IDA plugin (e.g., `findcrypt3.py`) in the plugins folder.
    - Add all Ghidralation wrapper files (`main.py`, `cp.py`, `idaapi.py`, etc.) to that same folder.
 
 2. **Launch Ghidra in console mode** (to see output)
