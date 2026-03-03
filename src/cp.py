@@ -1,2 +1,2 @@
-#@category layer
+#@category GCL
 currentProgram = None

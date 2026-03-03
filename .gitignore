@@ -1,0 +1,29 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+.env/
+.venv/
+
+# IDE / Editor settings
+.vscode/
+.idea/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Test & coverage
+.coverage
+.pytest_cache/
+
+# Logs
+*.log
+
+# ignore plugins directory
+plugins/
+plugins/*
+CHANGES.md
