@@ -16,16 +16,36 @@ from ghidra.util.data import DataTypeParser
 from ghidra.util.task import TaskMonitor
 from ghidra.program.model.lang import OperandType
 from array import array
+from enum import IntEnum
 import ida_bytes
 import cp
 import ida_ua
 import ida_name
 
-SEGATTR_START = 0
-SEGATTR_END = 4
+
+class SegAttr(IntEnum):
+    """Segment attribute selectors for get_segm_attr()."""
+
+    START = 0
+    END = 4
+
+
+class OpType(IntEnum):
+    """IDA-style operand type codes."""
+
+    REG = 1  # register operand
+    MEM = 2  # memory operand
+
+
 BADADDR = -1
 BADNODE = -1  # IDA's BADNODE constant for type/node errors
 USE_DEFAULT_LENGTH = 0
+
+# Backwards-compatible aliases
+SEGATTR_START = SegAttr.START
+SEGATTR_END = SegAttr.END
+o_reg = OpType.REG
+o_mem = OpType.MEM
 
 # Segment name constants
 EXTERNAL_SEGMENT_NAME = "EXTERNAL"
@@ -36,9 +56,6 @@ set_cmt = ida_bytes.set_cmt
 get_wide_word = ida_bytes.get_wide_word
 get_wide_dword = ida_bytes.get_wide_dword
 get_wide_byte = ida_bytes.get_wide_byte
-
-o_reg = 1
-o_mem = 2
 
 
 def get_program_context():
